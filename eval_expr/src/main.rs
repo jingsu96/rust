@@ -1,3 +1,5 @@
+use std::{iter::Peekable, str::Chars};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Token {
     Number(i32),
@@ -7,49 +9,67 @@ enum Token {
     Multiply,
 }
 
-fn tokenize(src: &str) -> Result<Vec<Token>, String> {
-    let mut tokens = Vec::new();
-    let mut chars = src.chars().peekable();
+#[derive(Debug)]
+struct Tokenizer<'a> {
+    tokens: Peekable<Chars<'a>>,
+}
 
-    while let Some(&c) = chars.peek() {
-        match c {
-            '0'..='9' => {
-                let mut num = 0;
-
-                while let Some(&c) = chars.peek() {
-                    if c.is_digit(10) {
-                        num = num * 10 + c.to_digit(10).unwrap() as i32;
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-
-                tokens.push(Token::Number(num));
-            }
-            '+' => {
-                tokens.push(Token::Plus);
-                chars.next();
-            }
-            '-' => {
-                tokens.push(Token::Minus);
-                chars.next();
-            }
-            '*' => {
-                tokens.push(Token::Multiply);
-                chars.next();
-            }
-            '/' => {
-                tokens.push(Token::Divide);
-                chars.next();
-            }
-            ' ' => {
-                chars.next();
-            }
-            _ => return Err(format!("Invalid character: {}", c)),
+impl<'a> Tokenizer<'a> {
+    fn new(src: &'a str) -> Self {
+        Self {
+            tokens: src.chars().peekable(),
         }
     }
-    Ok(tokens)
+
+    fn consume_whitespace(&mut self) {
+        while let Some(&c) = self.tokens.peek() {
+            if c.is_whitespace() {
+                self.tokens.next();
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn scan_number(&mut self) -> Option<Token> {
+        let mut num = 0;
+
+        while let Some(&c) = self.tokens.peek() {
+            if c.is_digit(10) {
+                num = num * 10 + c.to_digit(10).unwrap() as i32;
+                self.tokens.next();
+            } else {
+                break;
+            }
+        }
+
+        Some(Token::Number(num))
+    }
+
+    fn scan_operator(&mut self) -> Option<Token> {
+        let op = match self.tokens.next() {
+            Some('+') => Token::Plus,
+            Some('-') => Token::Minus,
+            Some('*') => Token::Multiply,
+            Some('/') => Token::Divide,
+            _ => return None,
+        };
+        Some(op)
+    }
+}
+
+impl<'a> Iterator for Tokenizer<'a> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.consume_whitespace();
+
+        match self.tokens.peek() {
+            Some(&c) if c.is_numeric() => self.scan_number(),
+            Some(_) => self.scan_operator(),
+            None => None,
+        }
+    }
 }
 
 fn precedence(op: &Token) -> i32 {
@@ -85,7 +105,7 @@ fn apply_op(numbers: &mut Vec<i32>, op: Token) -> Result<(), String> {
 }
 
 fn eval_expr(src: &str) -> Result<i32, String> {
-    let tokens = tokenize(src)?;
+    let tokens = Tokenizer::new(src);
     let mut numbers = Vec::new();
     let mut ops = Vec::new();
 
@@ -121,7 +141,7 @@ mod tests {
     #[test]
     fn test_tokenize() {
         assert_eq!(
-            tokenize("1 + 2 - 3").unwrap(),
+            Tokenizer::new("1 + 2 - 3").collect::<Vec<_>>(),
             vec![
                 Token::Number(1),
                 Token::Plus,
