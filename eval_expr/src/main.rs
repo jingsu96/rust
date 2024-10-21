@@ -5,6 +5,18 @@ enum Token {
     Minus,
 }
 
+#[derive(Debug)]
+struct Accumulator {
+    result: i32,
+    operand: Operand,
+}
+
+#[derive(Debug)]
+enum Operand {
+    Add,
+    Sub,
+}
+
 fn tokenize(src: &str) -> Result<Vec<Token>, String> {
     let mut tokens = Vec::new();
     let mut chars = src.chars().peekable();
@@ -22,6 +34,7 @@ fn tokenize(src: &str) -> Result<Vec<Token>, String> {
                         break;
                     }
                 }
+
                 tokens.push(Token::Number(num));
             }
             '+' => {
@@ -41,9 +54,31 @@ fn tokenize(src: &str) -> Result<Vec<Token>, String> {
     Ok(tokens)
 }
 
-fn eval_expr(src: &str) -> Result<Vec<Token>, String> {
+fn eval_expr(src: &str) -> Result<i32, String> {
     let tokens = tokenize(src)?;
-    Ok(tokens)
+
+    let initial_acc = Accumulator {
+        result: 0,
+        operand: Operand::Add,
+    };
+
+    // Currently, we only have two operands: Add and Sub, so we don't need to worry about precedence, just evaluate from left to right.
+    let sum = tokens
+        .iter()
+        .fold(initial_acc, |mut acc, token| {
+            match token {
+                Token::Number(num) => match acc.operand {
+                    Operand::Add => acc.result += num,
+                    Operand::Sub => acc.result -= num,
+                },
+                Token::Plus => acc.operand = Operand::Add,
+                Token::Minus => acc.operand = Operand::Sub,
+            }
+            acc
+        })
+        .result;
+
+    Ok(sum)
 }
 
 #[cfg(test)]
@@ -53,7 +88,7 @@ mod tests {
     #[test]
     fn test_tokenize() {
         assert_eq!(
-            eval_expr("1 + 2 - 3").unwrap(),
+            tokenize("1 + 2 - 3").unwrap(),
             vec![
                 Token::Number(1),
                 Token::Plus,
@@ -62,5 +97,12 @@ mod tests {
                 Token::Number(3)
             ]
         );
+    }
+
+    #[test]
+    fn test_eval_expr() {
+        assert_eq!(eval_expr("1 + 2 - 3").unwrap(), 0);
+        assert_eq!(eval_expr("1 + 2 - 3 + 4").unwrap(), 4);
+        assert_eq!(eval_expr("1 + 2 - 3 + 4 - 5").unwrap(), -1);
     }
 }
