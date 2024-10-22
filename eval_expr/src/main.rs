@@ -1,5 +1,7 @@
 use std::{fmt::Display, iter::Peekable, str::Chars};
 
+pub type Result<T> = std::result::Result<T, ExprError>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Token {
     Number(i32),
@@ -7,6 +9,9 @@ enum Token {
     Minus,
     Divide,
     Multiply,
+    Power,
+    LeftParen,
+    RightParen,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -27,7 +32,13 @@ impl Display for ExprError {
 impl Token {
     fn is_operator(&self) -> bool {
         match self {
-            Token::Plus | Token::Minus | Token::Divide | Token::Multiply => true,
+            Token::Plus
+            | Token::Minus
+            | Token::Divide
+            | Token::Multiply
+            | Token::Power
+            | Token::RightParen
+            | Token::LeftParen => true,
             _ => false,
         }
     }
@@ -36,6 +47,7 @@ impl Token {
         match op {
             Token::Multiply | Token::Divide => 2,
             Token::Plus | Token::Minus => 1,
+            Token::Power => 3,
             _ => 0,
         }
     }
@@ -52,6 +64,7 @@ impl Token {
                     Some(l / r)
                 }
             }
+            Token::Power => Some(l.pow(r as u32)),
             _ => None,
         }
     }
@@ -100,6 +113,9 @@ impl<'a> Tokenizer<'a> {
             Some('-') => Token::Minus,
             Some('*') => Token::Multiply,
             Some('/') => Token::Divide,
+            Some('^') => Token::Power,
+            Some('(') => Token::LeftParen,
+            Some(')') => Token::RightParen,
             _ => return None,
         };
         Some(op)
@@ -121,66 +137,65 @@ impl<'a> Iterator for Tokenizer<'a> {
 }
 
 struct Expr<'a> {
-    tokens: Peekable<Tokenizer<'a>>,
+    iter: Peekable<Tokenizer<'a>>,
 }
 
 impl<'a> Expr<'a> {
     pub fn new(src: &'a str) -> Self {
         Self {
-            tokens: Tokenizer::new(src).peekable(),
+            iter: Tokenizer::new(src).peekable(),
         }
     }
 
-    pub fn eval(&mut self) -> Result<i32, String> {
-        self.compute_expr()
+    pub fn eval(&mut self) -> Result<i32> {
+        let result = self.compute_expr(1)?;
+
+        print!("{:?}", self.iter.peek());
+        if self.iter.peek().is_some() {
+            return Err(ExprError::Parse("Unexpected end of expression".into()));
+        };
+
+        Ok(result)
     }
 
-    fn apply_op(numbers: &mut Vec<i32>, op: Token) -> Result<(), String> {
-        if numbers.len() < 2 {
-            return Err(
-                ExprError::Parse("Not enough numbers to apply operator".into()).to_string(),
-            );
-        }
-
-        let b = numbers.pop().unwrap();
-        let a = numbers.pop().unwrap();
-
-        let result = op
-            .compute(a, b)
-            .ok_or_else(|| ExprError::Parse("Division by zero".into()).to_string())?;
-
-        numbers.push(result);
-        Ok(())
-    }
-
-    pub fn compute_expr(&mut self) -> Result<i32, String> {
-        let mut numbers = Vec::new();
-        let mut ops = Vec::new();
-
-        while let Some(token) = self.tokens.next() {
-            match token {
-                Token::Number(num) => numbers.push(num),
-                token if token.is_operator() => {
-                    while let Some(&op) = ops.last() {
-                        if Token::precedence(&op) >= Token::precedence(&token) {
-                            Self::apply_op(&mut numbers, ops.pop().unwrap())?;
-                        } else {
-                            break;
-                        }
-                    }
-                    ops.push(token);
-                }
-                _ => return Err(ExprError::Parse("Invalid token".into()).to_string()),
+    // New method to handle atomic expressions (numbers and parenthesized expressions)
+    fn compute_atom(&mut self) -> Result<i32> {
+        match self.iter.peek() {
+            Some(Token::Number(num)) => {
+                let val = *num;
+                self.iter.next();
+                Ok(val)
             }
+            Some(Token::LeftParen) => {
+                self.iter.next(); // consume '('
+                let result = self.compute_expr(1)?;
+                match self.iter.next() {
+                    Some(Token::RightParen) => Ok(result),
+                    _ => Err(ExprError::Parse("Expected closing parenthesis".into())),
+                }
+            }
+            _ => Err(ExprError::Parse("Expected number or parenthesis".into())),
+        }
+    }
+
+    pub fn compute_expr(&mut self, min_prec: i32) -> Result<i32> {
+        let mut lhs = self.compute_atom()?;
+
+        while let Some(&token) = self.iter.peek() {
+            if !token.is_operator() || Token::precedence(&token) < min_prec {
+                break;
+            }
+
+            self.iter.next(); // consume operator
+
+            let rhs = self.compute_expr(Token::precedence(&token) + 1)?;
+
+            lhs = token
+                .compute(lhs, rhs)
+                .ok_or_else(|| ExprError::Parse("Invalid operation".into()))?;
         }
 
-        while let Some(op) = ops.pop() {
-            Self::apply_op(&mut numbers, op)?;
-        }
-
-        numbers
-            .pop()
-            .ok_or_else(|| ExprError::Parse("Invalid expression".into()).to_string())
+        Ok(lhs)
     }
 }
 
@@ -222,19 +237,37 @@ mod tests {
         let mut expr = Expr::new("1 + 2 *");
         assert_eq!(
             expr.eval().unwrap_err().to_string(),
-            "Not enough numbers to apply operator"
+            "Expected number or parenthesis"
         );
 
         let mut expr = Expr::new("1 + 2 / 0");
-        assert_eq!(expr.eval().unwrap_err().to_string(), "Division by zero");
+        assert_eq!(expr.eval().unwrap_err().to_string(), "Invalid operation");
 
         let mut expr = Expr::new("1 + 2 * 3 -");
         assert_eq!(
             expr.eval().unwrap_err().to_string(),
-            "Not enough numbers to apply operator"
+            "Expected number or parenthesis"
         );
 
         let mut expr = Expr::new("1 + 2 * 3 - 4 / 0");
-        assert_eq!(expr.eval().unwrap_err().to_string(), "Division by zero");
+        assert_eq!(expr.eval().unwrap_err().to_string(), "Invalid operation");
+    }
+
+    #[test]
+    fn test_parentheses() {
+        let mut expr = Expr::new("(2 + 3) * 4");
+        assert_eq!(expr.eval().unwrap(), 20);
+    }
+
+    #[test]
+    fn test_power() {
+        let mut expr = Expr::new("2 ^ 3");
+        assert_eq!(expr.eval().unwrap(), 8);
+    }
+
+    #[test]
+    fn test_complex_expr() {
+        let mut expr = Expr::new("2 * (3 + 4) ^ 2");
+        assert_eq!(expr.eval().unwrap(), 98);
     }
 }

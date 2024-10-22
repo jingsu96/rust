@@ -10,3 +10,4 @@ This is a simple expression evaluator written in Rust that can evaluate basic ar
 - **v6**: Refactored the `eval_expr` function to use the `Expr` struct for storing tokens and the result.
 - **v7**: Refactored the `Token` enum and added functionality to parse a string into a token.
 - **v8**: Implemented error handling for parsing and applying operators.
+- **v9**: Added three new operators: `^`, `(`, and `)`, and implemented the top-down operator precedence parsing algorithm to handle operator precedence.
