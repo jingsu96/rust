@@ -1,12 +1,12 @@
 # eval_expr
 
-This is a simple expression evaluator written in rust. It can evaluate simple arithmetic expressions.
+This is a simple expression evaluator written in Rust that can evaluate basic arithmetic expressions.
 
-- v1: Simple functionality.
-- v2: This version includes a Token enum for defining units, a tokenize function to convert input strings into tokens, an `eval_expr` function to parse tokens and return tokens.
-- v3: This version we accumulate the result from the tokens and return the result as a number.
-- v4: This version includes new operators: `*` and `/` and also modified the `eval_expr` function to handle these operators. since `*` and `/` have higher precedence than `+` and `-`, we need to handle them first.
-- v5: Refactor tokenize function, optimized the `Tokenize` struct and implemented the `Iterator` trait for it.
-- v6: Refactor `eval_expr` function, using `Expr` struct to store the tokens and result.
-- v7: Refactor `Token` enum, add functionality to parse a string into a token.
-- v8: Implement error handling for parsing and applying operators.
+- **v1**: Introduced simple functionality.
+- **v2**: Added a `Token` enum to define units, a `tokenize` function to convert input strings into tokens, and an `eval_expr` function to parse tokens and return the evaluation result.
+- **v3**: Modified the implementation to accumulate the result from the tokens and return the final result as a number.
+- **v4**: Introduced new operators, `*` and `/`, and updated the `eval_expr` function to handle these operators, ensuring that they are processed before `+` and `-` due to their higher precedence.
+- **v5**: Refactored the `tokenize` function, optimized the `Tokenize` struct, and implemented the `Iterator` trait for it.
+- **v6**: Refactored the `eval_expr` function to use the `Expr` struct for storing tokens and the result.
+- **v7**: Refactored the `Token` enum and added functionality to parse a string into a token.
+- **v8**: Implemented error handling for parsing and applying operators.
