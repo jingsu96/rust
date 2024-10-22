@@ -9,3 +9,4 @@ This is a simple expression evaluator written in rust. It can evaluate simple ar
 - v5: Refactor tokenize function, optimized the `Tokenize` struct and implemented the `Iterator` trait for it.
 - v6: Refactor `eval_expr` function, using `Expr` struct to store the tokens and result.
 - v7: Refactor `Token` enum, add functionality to parse a string into a token.
+- v8: Implement error handling for parsing and applying operators.

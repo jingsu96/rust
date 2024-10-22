@@ -1,4 +1,4 @@
-use std::{iter::Peekable, str::Chars};
+use std::{fmt::Display, iter::Peekable, str::Chars};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Token {
@@ -7,6 +7,21 @@ enum Token {
     Minus,
     Divide,
     Multiply,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExprError {
+    Parse(String),
+}
+
+impl std::error::Error for ExprError {}
+
+impl Display for ExprError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse(s) => write!(f, "{}", s),
+        }
+    }
 }
 
 impl Token {
@@ -122,7 +137,9 @@ impl<'a> Expr<'a> {
 
     fn apply_op(numbers: &mut Vec<i32>, op: Token) -> Result<(), String> {
         if numbers.len() < 2 {
-            return Err("Not enough numbers to apply operator".to_string());
+            return Err(
+                ExprError::Parse("Not enough numbers to apply operator".into()).to_string(),
+            );
         }
 
         let b = numbers.pop().unwrap();
@@ -130,7 +147,7 @@ impl<'a> Expr<'a> {
 
         let result = op
             .compute(a, b)
-            .ok_or_else(|| "Division by zero".to_string())?;
+            .ok_or_else(|| ExprError::Parse("Division by zero".into()).to_string())?;
 
         numbers.push(result);
         Ok(())
@@ -153,7 +170,7 @@ impl<'a> Expr<'a> {
                     }
                     ops.push(token);
                 }
-                _ => return Err("Invalid token".to_string()),
+                _ => return Err(ExprError::Parse("Invalid token".into()).to_string()),
             }
         }
 
@@ -163,7 +180,7 @@ impl<'a> Expr<'a> {
 
         numbers
             .pop()
-            .ok_or_else(|| "Invalid expression".to_string())
+            .ok_or_else(|| ExprError::Parse("Invalid expression".into()).to_string())
     }
 }
 
@@ -198,5 +215,26 @@ mod tests {
 
         let mut expr = Expr::new("1 + 2 * 3 - 4");
         assert_eq!(expr.eval().unwrap(), 3);
+    }
+
+    #[test]
+    fn test_parse_error() {
+        let mut expr = Expr::new("1 + 2 *");
+        assert_eq!(
+            expr.eval().unwrap_err().to_string(),
+            "Not enough numbers to apply operator"
+        );
+
+        let mut expr = Expr::new("1 + 2 / 0");
+        assert_eq!(expr.eval().unwrap_err().to_string(), "Division by zero");
+
+        let mut expr = Expr::new("1 + 2 * 3 -");
+        assert_eq!(
+            expr.eval().unwrap_err().to_string(),
+            "Not enough numbers to apply operator"
+        );
+
+        let mut expr = Expr::new("1 + 2 * 3 - 4 / 0");
+        assert_eq!(expr.eval().unwrap_err().to_string(), "Division by zero");
     }
 }
