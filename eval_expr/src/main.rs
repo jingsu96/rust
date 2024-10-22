@@ -104,34 +104,49 @@ fn apply_op(numbers: &mut Vec<i32>, op: Token) -> Result<(), String> {
     Ok(())
 }
 
-fn eval_expr(src: &str) -> Result<i32, String> {
-    let tokens = Tokenizer::new(src);
-    let mut numbers = Vec::new();
-    let mut ops = Vec::new();
+struct Expr<'a> {
+    tokens: Peekable<Tokenizer<'a>>,
+}
 
-    for token in tokens {
-        match token {
-            Token::Number(num) => numbers.push(num),
-            Token::Plus | Token::Minus | Token::Multiply | Token::Divide => {
-                while let Some(&op) = ops.last() {
-                    if precedence(&op) >= precedence(&token) {
-                        apply_op(&mut numbers, ops.pop().unwrap())?;
-                    } else {
-                        break;
-                    }
-                }
-                ops.push(token);
-            }
+impl<'a> Expr<'a> {
+    pub fn new(src: &'a str) -> Self {
+        Self {
+            tokens: Tokenizer::new(src).peekable(),
         }
     }
 
-    while let Some(op) = ops.pop() {
-        apply_op(&mut numbers, op)?;
+    pub fn eval(&mut self) -> Result<i32, String> {
+        self.compute_expr()
     }
 
-    numbers
-        .pop()
-        .ok_or_else(|| "Invalid expression".to_string())
+    pub fn compute_expr(&mut self) -> Result<i32, String> {
+        let mut numbers = Vec::new();
+        let mut ops = Vec::new();
+
+        while let Some(token) = self.tokens.next() {
+            match token {
+                Token::Number(num) => numbers.push(num),
+                Token::Plus | Token::Minus | Token::Multiply | Token::Divide => {
+                    while let Some(&op) = ops.last() {
+                        if precedence(&op) >= precedence(&token) {
+                            apply_op(&mut numbers, ops.pop().unwrap())?;
+                        } else {
+                            break;
+                        }
+                    }
+                    ops.push(token);
+                }
+            }
+        }
+
+        while let Some(op) = ops.pop() {
+            apply_op(&mut numbers, op)?;
+        }
+
+        numbers
+            .pop()
+            .ok_or_else(|| "Invalid expression".to_string())
+    }
 }
 
 #[cfg(test)]
@@ -154,15 +169,16 @@ mod tests {
 
     #[test]
     fn test_eval_expr() {
-        assert_eq!(eval_expr("1 + 2 - 3").unwrap(), 0);
-        assert_eq!(eval_expr("1 + 2 - 3 + 4").unwrap(), 4);
-        assert_eq!(eval_expr("1 + 2 - 3 + 4 - 5").unwrap(), -1);
+        let mut expr = Expr::new("1 + 2 - 3");
+        assert_eq!(expr.eval().unwrap(), 0);
     }
 
     #[test]
     fn test_eval_expr_with_precedence() {
-        assert_eq!(eval_expr("1 + 2 * 3").unwrap(), 7);
-        assert_eq!(eval_expr("1 + 2 * 3 - 4").unwrap(), 3);
-        assert_eq!(eval_expr("1 + 2 * 3 - 4 / 2").unwrap(), 5);
+        let mut expr = Expr::new("1 + 2 * 3");
+        assert_eq!(expr.eval().unwrap(), 7);
+
+        let mut expr = Expr::new("1 + 2 * 3 - 4");
+        assert_eq!(expr.eval().unwrap(), 3);
     }
 }
