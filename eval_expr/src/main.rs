@@ -2,6 +2,9 @@ use std::{fmt::Display, iter::Peekable, str::Chars};
 
 pub type Result<T> = std::result::Result<T, ExprError>;
 
+const ASSOC_LEFT: i32 = 0;
+const ASSOC_RIGHT: i32 = 1;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Token {
     Number(i32),
@@ -17,6 +20,8 @@ enum Token {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExprError {
     Parse(String),
+    DivisionByZero,
+    InvalidNumber,
 }
 
 impl std::error::Error for ExprError {}
@@ -24,23 +29,19 @@ impl std::error::Error for ExprError {}
 impl Display for ExprError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Parse(s) => write!(f, "{}", s),
+            Self::Parse(s) => write!(f, "Parse error: {}", s),
+            Self::DivisionByZero => write!(f, "Division by zero"),
+            Self::InvalidNumber => write!(f, "Invalid number format"),
         }
     }
 }
 
 impl Token {
     fn is_operator(&self) -> bool {
-        match self {
-            Token::Plus
-            | Token::Minus
-            | Token::Divide
-            | Token::Multiply
-            | Token::Power
-            | Token::RightParen
-            | Token::LeftParen => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Token::Plus | Token::Minus | Token::Multiply | Token::Divide | Token::Power
+        )
     }
 
     fn precedence(op: &Token) -> i32 {
@@ -49,6 +50,13 @@ impl Token {
             Token::Plus | Token::Minus => 1,
             Token::Power => 3,
             _ => 0,
+        }
+    }
+
+    fn assoc(&self) -> i32 {
+        match self {
+            Token::Power => ASSOC_RIGHT,
+            _ => ASSOC_LEFT,
         }
     }
 
@@ -150,7 +158,6 @@ impl<'a> Expr<'a> {
     pub fn eval(&mut self) -> Result<i32> {
         let result = self.compute_expr(1)?;
 
-        print!("{:?}", self.iter.peek());
         if self.iter.peek().is_some() {
             return Err(ExprError::Parse("Unexpected end of expression".into()));
         };
@@ -186,13 +193,17 @@ impl<'a> Expr<'a> {
                 break;
             }
 
-            self.iter.next(); // consume operator
+            let op = token;
+            self.iter.next();
 
-            let rhs = self.compute_expr(Token::precedence(&token) + 1)?;
+            let next_min_prec = if op.assoc() == ASSOC_LEFT {
+                Token::precedence(&op) + 1
+            } else {
+                Token::precedence(&op)
+            };
 
-            lhs = token
-                .compute(lhs, rhs)
-                .ok_or_else(|| ExprError::Parse("Invalid operation".into()))?;
+            let rhs = self.compute_expr(next_min_prec)?;
+            lhs = op.compute(lhs, rhs).ok_or(ExprError::InvalidNumber)?;
         }
 
         Ok(lhs)
@@ -237,20 +248,20 @@ mod tests {
         let mut expr = Expr::new("1 + 2 *");
         assert_eq!(
             expr.eval().unwrap_err().to_string(),
-            "Expected number or parenthesis"
+            "Parse error: Expected number or parenthesis"
         );
 
         let mut expr = Expr::new("1 + 2 / 0");
-        assert_eq!(expr.eval().unwrap_err().to_string(), "Invalid operation");
+        assert_eq!(expr.eval().unwrap_err().to_string(), "Invalid number format");
 
         let mut expr = Expr::new("1 + 2 * 3 -");
         assert_eq!(
             expr.eval().unwrap_err().to_string(),
-            "Expected number or parenthesis"
+            "Parse error: Expected number or parenthesis"
         );
 
         let mut expr = Expr::new("1 + 2 * 3 - 4 / 0");
-        assert_eq!(expr.eval().unwrap_err().to_string(), "Invalid operation");
+        assert_eq!(expr.eval().unwrap_err().to_string(), "Invalid number format");
     }
 
     #[test]
@@ -266,8 +277,13 @@ mod tests {
     }
 
     #[test]
-    fn test_complex_expr() {
-        let mut expr = Expr::new("2 * (3 + 4) ^ 2");
-        assert_eq!(expr.eval().unwrap(), 98);
+    fn test_complex_expressions() {
+        assert_eq!(Expr::new("2 + 3 * 4").eval().unwrap(), 14);
+        assert_eq!(Expr::new("(2 + 3) * 4").eval().unwrap(), 20);
+        assert_eq!(Expr::new("2 ^ 3 ^ 2").eval().unwrap(), 512);
+        assert_eq!(Expr::new("2 * (3 + 4) ^ 2").eval().unwrap(), 98);
+        assert_eq!(Expr::new("2 ^ (1 ^ 4)").eval().unwrap(), 2);
+        assert_eq!(Expr::new("(2 ^ 1) ^ 4").eval().unwrap(), 16);
+
     }
 }

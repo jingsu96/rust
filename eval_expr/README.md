@@ -11,3 +11,4 @@ This is a simple expression evaluator written in Rust that can evaluate basic ar
 - **v7**: Refactored the `Token` enum and added functionality to parse a string into a token.
 - **v8**: Implemented error handling for parsing and applying operators.
 - **v9**: Added three new operators: `^`, `(`, and `)`, and implemented the top-down operator precedence parsing algorithm to handle operator precedence.
+- **v10**: Added support for associativity of operators.
