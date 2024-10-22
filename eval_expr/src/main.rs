@@ -9,6 +9,39 @@ enum Token {
     Multiply,
 }
 
+impl Token {
+    fn is_operator(&self) -> bool {
+        match self {
+            Token::Plus | Token::Minus | Token::Divide | Token::Multiply => true,
+            _ => false,
+        }
+    }
+
+    fn precedence(op: &Token) -> i32 {
+        match op {
+            Token::Multiply | Token::Divide => 2,
+            Token::Plus | Token::Minus => 1,
+            _ => 0,
+        }
+    }
+
+    fn compute(&self, l: i32, r: i32) -> Option<i32> {
+        match &self {
+            Token::Plus => Some(l + r),
+            Token::Minus => Some(l - r),
+            Token::Multiply => Some(l * r),
+            Token::Divide => {
+                if r == 0 {
+                    None
+                } else {
+                    Some(l / r)
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Tokenizer<'a> {
     tokens: Peekable<Chars<'a>>,
@@ -72,38 +105,6 @@ impl<'a> Iterator for Tokenizer<'a> {
     }
 }
 
-fn precedence(op: &Token) -> i32 {
-    match op {
-        Token::Multiply | Token::Divide => 2,
-        Token::Plus | Token::Minus => 1,
-        _ => 0,
-    }
-}
-
-fn apply_op(numbers: &mut Vec<i32>, op: Token) -> Result<(), String> {
-    if numbers.len() < 2 {
-        return Err("Not enough numbers to apply operator".to_string());
-    }
-
-    let b = numbers.pop().unwrap();
-    let a = numbers.pop().unwrap();
-
-    let result = match op {
-        Token::Plus => a + b,
-        Token::Minus => a - b,
-        Token::Multiply => a * b,
-        Token::Divide => {
-            if b == 0 {
-                return Err("Division by zero".to_string());
-            }
-            a / b
-        }
-        _ => return Err("Invalid operator".to_string()),
-    };
-    numbers.push(result);
-    Ok(())
-}
-
 struct Expr<'a> {
     tokens: Peekable<Tokenizer<'a>>,
 }
@@ -119,6 +120,22 @@ impl<'a> Expr<'a> {
         self.compute_expr()
     }
 
+    fn apply_op(numbers: &mut Vec<i32>, op: Token) -> Result<(), String> {
+        if numbers.len() < 2 {
+            return Err("Not enough numbers to apply operator".to_string());
+        }
+
+        let b = numbers.pop().unwrap();
+        let a = numbers.pop().unwrap();
+
+        let result = op
+            .compute(a, b)
+            .ok_or_else(|| "Division by zero".to_string())?;
+
+        numbers.push(result);
+        Ok(())
+    }
+
     pub fn compute_expr(&mut self) -> Result<i32, String> {
         let mut numbers = Vec::new();
         let mut ops = Vec::new();
@@ -126,21 +143,22 @@ impl<'a> Expr<'a> {
         while let Some(token) = self.tokens.next() {
             match token {
                 Token::Number(num) => numbers.push(num),
-                Token::Plus | Token::Minus | Token::Multiply | Token::Divide => {
+                token if token.is_operator() => {
                     while let Some(&op) = ops.last() {
-                        if precedence(&op) >= precedence(&token) {
-                            apply_op(&mut numbers, ops.pop().unwrap())?;
+                        if Token::precedence(&op) >= Token::precedence(&token) {
+                            Self::apply_op(&mut numbers, ops.pop().unwrap())?;
                         } else {
                             break;
                         }
                     }
                     ops.push(token);
                 }
+                _ => return Err("Invalid token".to_string()),
             }
         }
 
         while let Some(op) = ops.pop() {
-            apply_op(&mut numbers, op)?;
+            Self::apply_op(&mut numbers, op)?;
         }
 
         numbers
